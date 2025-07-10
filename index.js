@@ -2,10 +2,13 @@ const express = require('express');
 const OAuth = require('oauth').OAuth;
 const dotenv = require('dotenv');
 const axios = require('axios');
+const session = require('express-session');
 
 dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
+
+app.use(session({ secret: 'yahoo', resave: false, saveUninitialized: true }));
 
 const oauth = new OAuth(
   'https://api.login.yahoo.com/oauth/v2/get_request_token',
@@ -23,10 +26,14 @@ let oauthAccessTokenSecret = '';
 app.get('/login', (req, res) => {
   oauth.getOAuthRequestToken((error, oauthToken, oauthTokenSecret) => {
     if (error) {
-      console.error('Request token error:', error);
-      return res.status(500).send('Error getting OAuth token');
+      console.error('🔴 Request token error:', JSON.stringify(error, null, 2));
+      res.setHeader('Content-Type', 'text/plain');
+      return res
+        .status(500)
+        .send(`Error getting OAuth token:\n\n${JSON.stringify(error, null, 2)}`);
     }
-    req.session = { oauthToken, oauthTokenSecret };
+    req.session.oauthToken = oauthToken;
+    req.session.oauthTokenSecret = oauthTokenSecret;
     const authURL = `https://api.login.yahoo.com/oauth/v2/request_auth?oauth_token=${oauthToken}`;
     res.redirect(authURL);
   });
@@ -42,7 +49,7 @@ app.get('/callback', (req, res) => {
     oauth_verifier,
     (error, accessToken, accessTokenSecret) => {
       if (error) {
-        console.error('Access token error:', error);
+        console.error('🔴 Access token error:', JSON.stringify(error, null, 2));
         return res.status(500).send('OAuth callback failed');
       }
 
@@ -53,7 +60,7 @@ app.get('/callback', (req, res) => {
   );
 });
 
-app.get('/teams', async (req, res) => {
+app.get('/teams', (req, res) => {
   const url = 'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_keys=nfl/teams?format=json';
 
   oauth.get(
@@ -62,7 +69,7 @@ app.get('/teams', async (req, res) => {
     oauthAccessTokenSecret,
     (err, data) => {
       if (err) {
-        console.error('Teams fetch error:', err);
+        console.error('❌ Teams fetch error:', err);
         return res.status(500).send('Failed to fetch teams');
       }
       res.setHeader('Content-Type', 'application/json');
